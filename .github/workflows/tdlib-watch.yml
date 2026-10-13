@@ -3,7 +3,7 @@ name: tdlib-watch
 # Installs the newest tdjson (prebuilt TDLib) and checks this code against it.
 on:
   schedule:
-    - cron: "17 */3 * * *"
+    - cron: "17 6 * * 1"
   workflow_dispatch:
 
 permissions:
