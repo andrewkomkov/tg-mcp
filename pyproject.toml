@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tg-mcp"
+version = "0.1.0"
+description = "Telegram CLI client and MCP server on top of the official TDLib"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Andrew Komkov" }]
+requires-python = ">=3.10"
+dependencies = [
+    # Prebuilt official TDLib. Deliberately unpinned: upgrading it is how the
+    # client follows new Telegram API layers.
+    "tdjson",
+    "mcp>=2,<3",
+    "click>=8",
+    "segno>=1.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+Repository = "https://github.com/andrewkomkov/tg-mcp"
+
+[project.scripts]
+tg = "tgmcp.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tgmcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

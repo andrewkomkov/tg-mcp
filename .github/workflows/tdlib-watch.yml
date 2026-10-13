@@ -1,0 +1,78 @@
+name: tdlib-watch
+
+# Installs the newest tdjson (prebuilt TDLib) and checks this code against it.
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency: tdlib-watch
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      TG_REQUIRE_SCHEMA: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install --upgrade -e '.[dev]'
+
+      - name: Detect the installed TDLib
+        id: tdlib
+        run: |
+          installed=$(python .github/tdlib_version.py)
+          echo "installed=$installed" >> "$GITHUB_OUTPUT"
+          echo "version=${installed%% *}" >> "$GITHUB_OUTPUT"
+          if [ "$installed" = "$(cat TDLIB_VERIFIED 2>/dev/null)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Test against the new TDLib
+        id: test
+        if: steps.tdlib.outputs.changed == 'true'
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pytest -q 2>&1 | tee result.txt
+
+      - name: Record the verified version
+        if: steps.tdlib.outputs.changed == 'true' && steps.test.outcome == 'success'
+        env:
+          INSTALLED: ${{ steps.tdlib.outputs.installed }}
+          VERSION: ${{ steps.tdlib.outputs.version }}
+        run: |
+          echo "$INSTALLED" > TDLIB_VERIFIED
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add TDLIB_VERIFIED
+          git commit -m "build(deps): verify tdlib $VERSION"
+          git push
+
+      - name: Report the breakage
+        if: steps.tdlib.outputs.changed == 'true' && steps.test.outcome == 'failure'
+        env:
+          VERSION: ${{ steps.tdlib.outputs.version }}
+        run: |
+          title="TDLib $VERSION breaks tg-mcp"
+          open=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq 'length')
+          if [ "$open" = "0" ]; then
+            {
+              echo "The scheduled check installed tdjson $VERSION. The tests failed."
+              echo
+              echo '```'
+              tail -n 60 result.txt
+              echo '```'
+            } > body.md
+            gh issue create --title "$title" --body-file body.md
+          fi
+          exit 1
